@@ -1,49 +1,64 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { User, UserDocument } from '../users/schemas/user.schema';
 import { LoginDto } from './dto/login.dto';
+
+// Simple Mock User Interface
+interface MockUser {
+    _id: string;
+    email: string;
+    password: string;
+    name?: string;
+    resetToken?: string;
+    resetTokenExpiry?: Date;
+}
 
 @Injectable()
 export class AuthService {
+    // In-memory user storage
+    private users: MockUser[] = [];
+
     constructor(
-        @InjectModel(User.name)
-        private userModel: Model<UserDocument>,
         private jwtService: JwtService,
-    ) { }
+    ) {
+        // Create a test user initially
+        this.preloadTestUser();
+    }
+
+    private async preloadTestUser() {
+        const hashedPassword = await bcrypt.hash('password123', 10);
+        this.users.push({
+            _id: 'test-user-id',
+            email: 'test@example.com',
+            password: hashedPassword,
+            name: 'Test User'
+        });
+        console.log('Mock: Test user preloaded (test@example.com / password123)');
+    }
 
     async login(loginDto: LoginDto) {
         const { email, password } = loginDto;
 
-        console.log('Intentando loguear a:', email);
+        console.log('Mock: Intentando loguear a:', email);
 
-        // buscar user por email
-        // si no lo encuentro, lanzo error de una
-        const user = await this.userModel.findOne({ email });
+        const user = this.users.find(u => u.email === email);
 
         if (!user) {
-            console.log('El usuario no existe');
+            console.log('Mock: El usuario no existe');
             throw new UnauthorizedException('Credenciales inválidas');
         }
 
-        // verificar password
-        // hay que comparar la pass plana con la hasheada
         const isPasswordValid = await bcrypt.compare(password, user.password);
 
         if (!isPasswordValid) {
-            console.log('Password incorrecto');
+            console.log('Mock: Password incorrecto');
             throw new UnauthorizedException('Credenciales inválidas');
         }
 
-        // generar token
-        // aqui guardo el id y el email en el token
         const payload = { sub: user._id, email: user.email };
         const token = await this.jwtService.signAsync(payload);
 
-        console.log('Login exitoso para:', email);
-        console.log('Token generado:', token);
+        console.log('Mock: Login exitoso para:', email);
 
         return {
             access_token: token,
@@ -54,141 +69,84 @@ export class AuthService {
         };
     }
 
-    // metodo para crear usuarios (util para testing)
     async createUser(email: string, password: string) {
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const user = new this.userModel({
-            email,
-            password: hashedPassword,
-        });
-
-        return await user.save();
+        // reuse register logic or direct push
+        return this.register({ email, password, name: 'Created User' });
     }
 
-    // Registro de nuevos usuarios
     async register(registerDto: { email: string; password: string; name?: string }) {
         const { email, password, name } = registerDto;
 
-        console.log('Registrando nuevo usuario:', email);
+        console.log('Mock: Registrando nuevo usuario:', email);
 
-        // Verificar si el email ya existe
-        const existingUser = await this.userModel.findOne({ email });
+        const existingUser = this.users.find(u => u.email === email);
 
         if (existingUser) {
-            console.log('Ya existe alguien con ese correo');
+            console.log('Mock: Ya existe alguien con ese correo');
             throw new UnauthorizedException('El correo electrónico ya está registrado');
         }
 
-        // Crear usuario
-        // siempre hashear la password antes de guardar!!
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const user = new this.userModel({
+        const newUser: MockUser = {
+            _id: Math.random().toString(36).substring(7),
             email,
             password: hashedPassword,
-            // Si agregamos campo 'name' a User entity, lo usamos aquí
-        });
+            name
+        };
 
-        const savedUser = await user.save();
+        this.users.push(newUser);
 
-        console.log('Usuario registrado y guardado en DB:', email);
+        console.log('Mock: Usuario registrado y guardado en memoria:', email);
 
-        // Retornar sin el password para que no se vea
-        const userObject = savedUser.toObject();
-        const { password: _, ...userWithoutPassword } = userObject;
+        const { password: _, ...userWithoutPassword } = newUser;
         return userWithoutPassword;
     }
 
-    // validar usuario por ID (usado por JWT strategy)
     async validateUserById(userId: string) {
-        const user = await this.userModel.findById(userId);
+        const user = this.users.find(u => u._id === userId);
 
         if (!user) {
             throw new UnauthorizedException();
         }
 
-        // no retornar el password
-        const userObject = user.toObject();
-        const { password, ...result } = userObject;
+        const { password, ...result } = user;
         return result;
     }
 
-    // Recuperación de contraseña - paso 1: generar token
-    // Recuperación de contraseña - paso 1: generar token
     async forgotPassword(email: string) {
-        console.log('Solicitud de recuperacion para:', email);
-
-        const user = await this.userModel.findOne({ email });
-
+        console.log('Mock: Solicitud de recuperacion para:', email);
+        const user = this.users.find(u => u.email === email);
         if (!user) {
-            // Por seguridad, no revelamos si el email existe o no
-            // aunque para debuggear a veces es molesto jaja
-            console.log('El correo no existe, pero no le digo al usuario');
-            return {
-                message: 'Si el correo existe, recibirás instrucciones para recuperar tu contraseña',
-            };
+            return { message: 'Si el correo existe, recibirás instrucciones...' };
         }
 
-        // Generar token aleatorio
-        // uso random string porque es mas facil
-        const resetToken = Math.random().toString(36).substring(2, 15) +
-            Math.random().toString(36).substring(2, 15);
-
-        // Token expira en 1 hora
+        const resetToken = 'mock-reset-token-' + Math.random().toString(36).substring(7);
         const resetTokenExpiry = new Date();
         resetTokenExpiry.setHours(resetTokenExpiry.getHours() + 1);
 
-        // Guardar token en la base de datos
         user.resetToken = resetToken;
         user.resetTokenExpiry = resetTokenExpiry;
-        await user.save();
 
-        console.log('------------------------------------------------');
-        console.log('Token de recuperación generado para:', email);
-        console.log('Token (copiar esto para resetear):', resetToken);
-        console.log('Expira en:', resetTokenExpiry);
-        console.log('------------------------------------------------');
+        console.log('Mock Token:', resetToken);
 
-        // TODO: En producción, enviar email con el link de reset
-        // Por ahora, retornamos el token en consola para testing
         return {
-            message: 'Si el correo existe, recibirás instrucciones para recuperar tu contraseña',
-            // Solo para desarrollo:
-            devToken: resetToken, // Eliminar esto en producción
+            message: 'Si el correo existe, recibirás instrucciones...',
+            devToken: resetToken,
         };
     }
 
-    // Recuperación de contraseña - paso 2: resetear con token
     async resetPassword(token: string, newPassword: string) {
-        // Buscar usuario con el token
-        const user = await this.userModel.findOne({
-            resetToken: token,
-        });
+        const user = this.users.find(u => u.resetToken === token);
 
-        if (!user) {
+        if (!user || (user.resetTokenExpiry && user.resetTokenExpiry < new Date())) {
             throw new UnauthorizedException('Token inválido o expirado');
         }
 
-        // Verificar que el token no haya expirado
-        if (!user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
-            throw new UnauthorizedException('Token inválido o expirado');
-        }
+        user.password = await bcrypt.hash(newPassword, 10);
+        user.resetToken = undefined;
+        user.resetTokenExpiry = undefined;
 
-        // Hashear nueva contraseña
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-        // Actualizar contraseña y limpiar token
-        user.password = hashedPassword;
-        user.resetToken = null;
-        user.resetTokenExpiry = null;
-        await user.save();
-
-        console.log('Contraseña actualizada para:', user.email);
-
-        return {
-            message: 'Contraseña actualizada exitosamente. Ya puedes iniciar sesión.',
-        };
+        return { message: 'Contraseña actualizada exitosamente.' };
     }
 }
-

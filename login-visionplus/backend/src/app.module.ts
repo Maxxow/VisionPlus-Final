@@ -23,25 +23,25 @@ import { CommentsModule } from './comments/comments.module';
         ConfigModule.forRoot({
             isGlobal: true,
         }),
-        MongooseModule.forRootAsync({
-            imports: [ConfigModule],
-            useFactory: async (configService: ConfigService) => ({
-                uri: configService.get<string>('MONGO_URI'),
-            }),
-            inject: [ConfigService],
-        }),
+        // MongooseModule.forRootAsync({
+        //     imports: [ConfigModule],
+        //     useFactory: async (configService: ConfigService) => ({
+        //         uri: configService.get<string>('MONGO_URI'),
+        //     }),
+        //     inject: [ConfigService],
+        // }),
         ThrottlerModule.forRoot([{
             ttl: 60000,
             limit: 150,
         }]),
         AuthModule,
-        MoviesModule, // modulo de peliculas con TMDB (costó configurarlo cawn)
-        ProfilesModule, // modulo de perfiles
-        ListsModule, // modulo de listas personalizadas
-        VideosModule, // modulo de videos
-        HistoryModule, // modulo de historial
-        SubscriptionsModule, // modulo de suscripciones y pagos
-        CommentsModule, // modulo de comentarios y reacciones
+        // MoviesModule, // modulo de peliculas con TMDB (costó configurarlo cawn)
+        // ProfilesModule, // modulo de perfiles
+        // ListsModule, // modulo de listas personalizadas
+        // VideosModule, // modulo de videos
+        // HistoryModule, // modulo de historial
+        // SubscriptionsModule, // modulo de suscripciones y pagos
+        // CommentsModule, // modulo de comentarios y reacciones
         ServeStaticModule.forRoot({
             rootPath: join(__dirname, '..', 'uploads'),
             serveRoot: '/uploads',

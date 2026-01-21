@@ -9,7 +9,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
     imports: [
-        MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+        // MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
         PassportModule,
         JwtModule.register({
             secret: process.env.JWT_SECRET || 'mi_super_secreto_123_cambiar_en_produccion',
